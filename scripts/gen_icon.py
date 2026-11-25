@@ -1,6 +1,6 @@
-"""生成启动器图标（1024 画布 → 各尺寸 + ico）。"""
+"""生成新图标：深色圆角底 + 白色 M + 绿色状态点（与界面 brand 标记一致）。"""
 import os
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 OUT = r"C:\Users\祁棠夙安\Desktop\项目\mc-launcher\src-tauri\icons"
 os.makedirs(OUT, exist_ok=True)
@@ -9,46 +9,34 @@ S = 1024
 img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
 d = ImageDraw.Draw(img)
 
-# 圆角深色背景
-d.rounded_rectangle([0, 0, S - 1, S - 1], radius=230, fill=(15, 23, 42, 255))
+# 深色圆角底（#18181b，与界面 --black 一致）
+d.rounded_rectangle([0, 0, S - 1, S - 1], radius=232, fill=(24, 24, 27, 255))
 
-# 草方块
-size = 640
-x0 = (S - size) // 2
-y0 = (S - size) // 2
+# 白色 M —— 优先 Arial Bold，找不到就退回系统字体
+font = None
+for path in (
+    r"C:\Windows\Fonts\arialbd.ttf",
+    r"C:\Windows\Fonts\segoeuib.ttf",
+    r"C:\Windows\Fonts\msyhbd.ttc",
+):
+    try:
+        font = ImageFont.truetype(path, 540)
+        break
+    except Exception:
+        continue
+if font is None:
+    font = ImageFont.load_default()
 
-# 土块本体
-d.rectangle([x0, y0, x0 + size, y0 + size], fill=(134, 96, 67, 255))
+bbox = d.textbbox((0, 0), "M", font=font)
+w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+x = (S - w) / 2 - bbox[0]
+y = (S - h) / 2 - bbox[1] - 52  # 稍微上移，给右下角的点留位置
+d.text((x, y), "M", font=font, fill=(255, 255, 255, 255))
 
-# 草皮（上 1/3）
-grass_h = size // 3
-d.rectangle([x0, y0, x0 + size, y0 + grass_h], fill=(76, 175, 80, 255))
-
-# 草皮下的高光/阴影像素
-d.rectangle([x0, y0 + grass_h - 8, x0 + size, y0 + grass_h], fill=(56, 142, 60, 255))
-
-# 像素格子纹理（4x4）
-pix = size // 8
-for i in range(8):
-    for j in range(8):
-        cx = x0 + i * pix
-        cy = y0 + j * pix
-        if j * pix < grass_h:
-            shade = ((i * 37 + j * 13) % 17) - 8
-            c = (max(0, min(255, 76 + shade)), max(0, min(255, 175 + shade)), max(0, min(255, 80 + shade)), 255)
-        else:
-            shade = ((i * 53 + j * 31) % 19) - 9
-            c = (max(0, min(255, 134 + shade)), max(0, min(255, 96 + shade)), max(0, min(255, 67 + shade)), 255)
-        d.rectangle([cx + 2, cy + 2, cx + pix - 2, cy + pix - 2], fill=c)
-
-# 左上格线加一点立体感
-d.rectangle([x0, y0, x0 + size, y0 + size], outline=(30, 41, 59, 60), width=4)
-
-# 镐子：简单斜十字
-pick_color = (226, 232, 240, 255)
-d.line([(S * 0.30, S * 0.72), (S * 0.70, S * 0.30)], fill=pick_color, width=46)
-d.line([(S * 0.52, S * 0.22), (S * 0.78, S * 0.44)], fill=pick_color, width=40)
-d.line([(S * 0.40, S * 0.22), (S * 0.62, S * 0.44)], fill=pick_color, width=40)
+# 右下角绿色状态点（与界面 --green 一致）
+r = S * 0.058
+cx, cy = S * 0.787, S * 0.787
+d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(34, 197, 94, 255))
 
 img.save(os.path.join(OUT, "icon.png"))
 
@@ -57,7 +45,9 @@ for px in (32, 128, 256, 512):
 
 img.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, "128x128@2x.png"))
 img.resize((48, 48), Image.LANCZOS).save(os.path.join(OUT, "icon_48.png"))
-img.resize((256, 256), Image.LANCZOS).save(os.path.join(OUT, "icon.ico"),
-                                            sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+img.resize((256, 256), Image.LANCZOS).save(
+    os.path.join(OUT, "icon.ico"),
+    sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+)
 
 print("generated:", ", ".join(sorted(os.listdir(OUT))))
