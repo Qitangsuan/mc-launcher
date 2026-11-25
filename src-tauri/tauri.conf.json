@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.qitangsuan.mclauncher.dev",
   "build": {
-    "beforeDevCommand": "dev.cmd",
+    "beforeDevCommand": ".\\dev.cmd",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "build.cmd",
+    "beforeBuildCommand": ".\\build.cmd",
     "frontendDist": "../dist"
   },
   "app": {
