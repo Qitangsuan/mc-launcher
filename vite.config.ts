@@ -10,7 +10,8 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      ignored: ["**/src-tauri/**"],
+      // src-tauri 由 cargo 管；临时写入的 .tmpdir / *.tmp 被锁时会让 watcher 崩（EBUSY）
+      ignored: ["**/src-tauri/**", "**/.*.tmpdir/**", "**/*.tmp"],
     },
   },
 });
