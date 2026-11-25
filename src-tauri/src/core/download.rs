@@ -2,6 +2,7 @@
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use sha1::{Digest, Sha1};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -133,7 +134,7 @@ async fn fetch_one(client: &reqwest::Client, task: &DownloadTask) -> Result<bool
             {
                 return Ok(false);
             }
-        } else if let Some(actual) = sha1_file(&task.path) {
+        } else if let Some(actual) = sha1_file_async(&task.path).await {
             if actual.eq_ignore_ascii_case(&task.sha1) {
                 return Ok(false);
             }
@@ -219,15 +220,46 @@ pub fn sha1_bytes(bytes: &[u8]) -> String {
     hex(&h.finalize())
 }
 
+/// 流式计算 SHA1 时的读缓冲区大小（32KB）
+const SHA1_BUF_SIZE: usize = 32 * 1024;
+
+/// 同步版（会阻塞当前线程）：async 代码里请用 [`sha1_file_async`]
 pub fn sha1_file(path: &Path) -> Option<String> {
-    let bytes = std::fs::read(path).ok()?;
-    Some(sha1_bytes(&bytes))
+    let file = std::fs::File::open(path).ok()?;
+    sha1_reader(std::io::BufReader::new(file)).ok()
 }
 
+/// 异步版：把整个「打开 + 循环读 + 哈希」丢进阻塞线程池，
+/// 避免在 tokio worker 上同步读大文件（client.jar 20MB+）。
+pub async fn sha1_file_async(path: &Path) -> Option<String> {
+    // spawn_blocking 要求闭包持有 'static 数据，所以把路径 clone 一份 move 进去
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || sha1_file(&path))
+        .await
+        .ok() // JoinError（运行时正在关闭等）→ None，调用处会按「校验不了」处理
+        .flatten()
+}
+
+/// 流式计算 SHA1：逐块读入固定缓冲区并 update，内存占用与文件大小无关。
+fn sha1_reader(mut reader: impl Read) -> std::io::Result<String> {
+    let mut h = Sha1::new();
+    let mut buf = [0u8; SHA1_BUF_SIZE];
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            return Ok(hex(&h.finalize()));
+        }
+        h.update(&buf[..n]);
+    }
+}
+
+/// 查表法：每字节拆成两个十六进制字符，无 format!、无额外分配
 fn hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut s = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        s.push_str(&format!("{b:02x}"));
+    for &b in bytes {
+        s.push(HEX[(b >> 4) as usize] as char);
+        s.push(HEX[(b & 0x0f) as usize] as char);
     }
     s
 }
