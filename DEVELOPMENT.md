@@ -13,10 +13,10 @@
 | Java 选择 | 自动命中官方启动器的 java-runtime-beta（Java 17） |
 | classpath | 65 个 jar，7766 字符 |
 
-**断网场景不测**（用户判断边际价值低）：核心风险已被「先收完 → SHA1 校验 → 再写盘」
+**断网场景不测**（评估后跳过）：核心风险已被「先收完 → SHA1 校验 → 再写盘」
 和「已存在跳过」覆盖。
 
-**不需要管理员权限**，`.minecraft` 在用户目录。
+**不需要管理员权限**，`.minecraft` 在开发者目录。
 
 ### 已知缺口
 
@@ -51,15 +51,42 @@
 
 ## 环境坑（与本项目无关但值得记）
 
-- **DSH 在 Session 6，用户桌面在 Session 2**：从 DSH 的 pwsh 启动的 GUI 程序
+- **DSH 在 Session 6，开发者桌面在 Session 2**：从 DSH 的 pwsh 启动的 GUI 程序
   无法创建窗口（`拒绝访问 os error 5` / `WebView2 ERROR_BUSY`）。
-  绕法：用户手动双击 exe，或先 `pnpm dev` 起前端服务再让用户双击。
+  绕法：开发者手动双击 exe，或先 `pnpm dev` 起前端服务再让开发者双击。
 - **`& explorer.exe <路径>` 会永久阻塞**：explorer 是 GUI 程序不返回退出码，
   PowerShell 同步调用会一直挂着（踩过一次，挂了 2 小时）。
   必须用 `Start-Process explorer.exe -ArgumentList "<路径>"`。
+- **`Start-Process -PassThru` 在 DSH 环境对 GUI 程序也会卡死**：
+  改用 `cmd /c start "" "<exe>"`。
 - **WebView2 157.0.4341.60 有崩溃 bug**（msedge_elf.dll 断点异常）。
   winget 静默安装 158 会「报成功但没装上」（Program Files 需要管理员），
   必须手动跑 installer 并点 UAC。现在是 158.0.4370.33。
+- **cmd 的 `NoDefaultCurrentDirectoryInExePath=1`**：导致 `build.cmd` 不能直接写名字调，
+  必须 `.\build.cmd`；且 `pnpm` 跑 `vue-tsc`/`vite` 时 node 要在 PATH 里
+  （`build.cmd` / `dev.cmd` 里已显式 set PATH）。
+
+## ★ 双击秒退的根因（2026-11-25 查了两小时）
+
+**现象**：签名后的 release exe 双击 0.2 秒退出，`boot.log` 空；但「以管理员身份运行」
+和 `runas /trustlevel:0x20000` 都正常。
+
+**根因**：**Windows 11 的 SmartScreen 对「非系统目录里的新签名 exe」用 AppContainer
+沙箱隔离运行**。AppContainer 没有访问 `%APPDATA%` / `%LOCALAPPDATA%` 的权限，于是：
+1. 写 `boot.log` → ACCESS DENIED
+2. 写 WebView2 数据目录 → ACCESS DENIED
+3. WebView2 初始化失败 → Rust panic → **exit code 101**
+
+**怎么确认的**：Process Monitor 捕获到进程查询
+`HKLM\System\CurrentControlSet\Control\Lsa\AnonymousAppContainerImpersonationLevelCheck`
+（只有 AppContainer 进程才查这个键），以及大量 `AppData\...` 的 `ACCESS DENIED`。
+
+**解决**：把 exe 放到 `C:\Program Files\MC Launcher\`（系统目录被 SmartScreen 信任，
+不套沙箱），桌面快捷方式指向它 —— 双击正常启动，无需管理员。
+
+**教训**：以后这类「双击秒退但管理员正常」的问题，第一件事不是查代码，
+是看进程是不是被 SmartScreen/AppContainer 隔离了。
+
 
 ## 搁置
 

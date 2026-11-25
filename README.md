@@ -1,70 +1,123 @@
 # MC Launcher
 
-一个用 Rust + Tauri 2 + Vue 3 写的 Minecraft 启动器（Windows）。
+一个用 **Rust + Tauri 2 + Vue 3** 写的 Minecraft 启动器。
 
-## 环境要求
+启动链路自己实现（不依赖第三方启动器库）：版本 JSON 解析与 `inheritsFrom` 合并、
+`rules` 过滤、并发下载 + SHA1 校验、natives 解压、启动参数拼接、Java 运行时管理。
 
-| 依赖 | 说明 |
+## 功能
+
+| 功能 | 状态 |
 |---|---|
-| Rust (MSVC 工具链) | Tauri 编译必需 |
-| Visual Studio Build Tools | Windows 上链接 Rust 必需，勾选「使用 C++ 的桌面开发」 |
-| Node.js 20+ / pnpm | 前端构建 |
-| WebView2 Runtime | Win11 自带，Win10 可能需手动装 |
+| 版本安装（正式版 / 快照分类、实时进度） | ✅ |
+| 启动游戏（完整参数拼接、rules 过滤） | ✅ |
+| Fabric / Quilt 加载器 | ✅ Fabric |
+| Forge / NeoForge | ✅ |
+| 离线登录（UUID 与 Java `nameUUIDFromBytes` 逐字节一致） | ✅ |
+| 多账号管理（切换 / 删除） | ✅ |
+| Java 自动检测 + 自动下载（Adoptium Temurin） | ✅ |
+| 游戏日志接入界面 + 落盘 | ✅ |
+| 微软正版登录 | ⚠️ 代码完成，需自备 Azure `client_id`（见下） |
+| 下载断点续传（SHA1 命中跳过） | ✅ |
+| 下载失败重试（3 次指数退避） | ✅ |
 
-### 安装 Rust
+## 截图
 
-```powershell
-winget install --id Rustlang.Rustup -e --accept-package-agreements --accept-source-agreements
+> 待补充
+
+## 安装
+
+### 直接使用
+
+从 Releases 下载安装包：
+
+- `MC Launcher_x.y.z_x64-setup.exe` —— NSIS 安装包（推荐）
+- `MC Launcher_x.y.z_x64_en-US.msi` —— MSI
+
+安装包是 **per-machine** 模式，会装到 `C:\Program Files\MC Launcher\`。
+
+### 从源码构建
+
+环境要求：
+
+- **Rust**（MSVC 工具链）
+- **Visual Studio Build Tools**（勾选「使用 C++ 的桌面开发」）
+- **Node.js 20+ / pnpm**
+- **WebView2 Runtime**（Win11 自带）
+
+```bash
+pnpm install
+pnpm tauri build
 ```
 
-装完新开终端验证：
+产物在 `src-tauri/target/release/bundle/`。
 
-```powershell
-rustc --version
-cargo --version
+### 开发
+
+```bash
+pnpm install
+pnpm tauri dev
 ```
 
-### 安装 VS Build Tools（必须以管理员身份运行）
+## 数据位置
 
-```powershell
-winget install Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+| 内容 | 路径 |
+|---|---|
+| 游戏本体 | `%APPDATA%\.minecraft` |
+| 启动器配置 / 账号 / 自动下载的 Java | `%APPDATA%\mc-launcher` |
+| WebView2 缓存 | `%LOCALAPPDATA%\com.qitangsuan.mclauncher` |
+
+## 微软正版登录
+
+代码已完整实现（Device Code Flow → Xbox Live → XSTS → Minecraft Token → Profile，
+含 refresh token 续期与 XSTS 错误码翻译），但需要一个 **Azure 应用的 client_id**：
+
+1. 在 [Azure Portal](https://portal.azure.com) 注册应用
+2. 受支持的账户类型选「任何组织目录中的账户和个人 Microsoft 账户」
+3. 「身份验证」→ 允许公共客户端流 → 是
+4. 把「应用程序(客户端) ID」填进启动器的账号面板
+
+个人微软账号现在无法直接注册 Azure 应用（需要 Entra 目录 / 订阅），
+所以这一步默认留空。
+
+## 已知问题
+
+- **Windows 11 SmartScreen 隔离**：非系统目录里的新签名 exe 会被 SmartScreen
+  用 AppContainer 沙箱运行，导致无法写 `%APPDATA%` 而崩溃。
+  这是把程序装进 `Program Files` 的原因。
+- 1.12.2 及更早版本用 legacy assets，需要映射到 `assets/virtual/legacy/`，尚未实现
+  → 能启动但没声音没材质。
+- 没做下载取消 / 暂停。
+
+## 项目结构
+
+```
+src/                      Vue 3 前端
+src-tauri/src/
+  core/                   核心逻辑（与 Tauri 无关，可单独测试）
+    version.rs            版本 JSON 解析、inheritsFrom 合并、rules 过滤
+    download.rs           并发下载、SHA1 校验、重试
+    prepare.rs            下载任务生成
+    args.rs               启动参数拼接
+    natives.rs            natives 解压
+    java.rs / java_download.rs   Java 检测与下载
+    fabric.rs / forge.rs  加载器安装
+    account.rs            账号存储、离线 UUID
+    microsoft.rs          微软登录
+  commands/               Tauri 命令
+examples/                 无 GUI 的安装实测
 ```
 
-## 开发命令
+## 测试
 
-```powershell
-pnpm install          # 装前端依赖
-pnpm dev              # 只跑前端（浏览器里看界面，无 Rust 后端）
-pnpm tauri dev        # 跑完整应用（需要 Rust 环境）
-pnpm tauri build      # 打包 exe / msi
+```bash
+cd src-tauri
+cargo test
 ```
 
-## 目录结构
+覆盖 rules 过滤、classpath 组装、离线 UUID（与 Java 逐字节对齐）、
+版本号排序、assets 路径生成等纯函数。
 
-```
-src/                       Vue 前端
-  App.vue                  主界面
-  style.css                样式
-src-tauri/                 Rust 后端
-  src/main.rs              入口
-  src/lib.rs               注册命令
-  src/commands/version.rs  scan_versions / launch_game
-  src/core/paths.rs        .minecraft 目录定位
-  src/core/manifest.rs     版本扫描与解析
-  tauri.conf.json          Tauri 配置
-scripts/gen_icon.py        图标生成
-```
+## 许可证
 
-## 进度
-
-- [x] 阶段 1：项目骨架、前端界面、版本扫描
-- [ ] 阶段 2：资源下载（libraries / assets / client.jar，SHA1 校验）
-- [ ] 阶段 3：参数拼接 + 启动 Java 进程
-- [ ] 阶段 4：离线登录 + 微软正版登录
-- [ ] 阶段 5：Java 运行时检测
-- [ ] 阶段 6：Fabric / Forge 支持
-
-## 已知坑
-
-- 游戏目录含中文时，classpath 参数必须整体加引号（代码里统一处理，别手拼）。
-- 启动游戏优先用 `java.exe` 而不是 `javaw.exe`，否则拿不到崩溃日志。
+[MIT](LICENSE)

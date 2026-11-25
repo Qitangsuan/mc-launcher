@@ -3,3 +3,9 @@ dist
 src-tauri/target
 *.local
 .DS_Store
+
+# 临时/捕获文件
+*.pml
+*.csv
+*.bak
+

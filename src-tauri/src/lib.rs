@@ -2,7 +2,8 @@ mod commands;
 pub mod core;
 
 pub fn run() {
-    tauri::Builder::default()
+    crate::boot_log("lib::run: building tauri app");
+    let app = tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::version::scan_versions,
             commands::version::list_remote_versions,
@@ -26,6 +27,33 @@ pub fn run() {
             commands::auth::ms_complete_login,
             commands::auth::ms_refresh,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!());
+
+    match app {
+        Ok(app) => {
+            crate::boot_log("lib::run: build ok, entering run");
+            app.run(|_app, _event| {});
+            crate::boot_log("lib::run: run returned");
+        }
+        Err(e) => {
+            crate::boot_log(&format!("lib::run: build FAILED: {e}"));
+            std::process::exit(1);
+        }
+    }
+}
+
+/// 给 main.rs 用的启动日志
+pub fn boot_log(msg: &str) {
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        let dir = std::path::PathBuf::from(appdata).join("mc-launcher");
+        let _ = std::fs::create_dir_all(&dir);
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("boot.log"))
+        {
+            let _ = writeln!(f, "{msg}");
+        }
+    }
 }
