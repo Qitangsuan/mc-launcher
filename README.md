@@ -67,18 +67,26 @@ pnpm tauri dev
 | 启动器配置 / 账号 / 自动下载的 Java | `%APPDATA%\mc-launcher` |
 | WebView2 缓存 | `%LOCALAPPDATA%\com.qitangsuan.mclauncher` |
 
-## 微软正版登录
+## 微软正版登录（默认隐藏）
 
 代码已完整实现（Device Code Flow → Xbox Live → XSTS → Minecraft Token → Profile，
-含 refresh token 续期与 XSTS 错误码翻译），但需要一个 **Azure 应用的 client_id**：
+含 refresh token 续期与 XSTS 错误码翻译），但前端入口默认关闭：
+
+```ts
+// src/App.vue
+const MS_LOGIN_ENABLED = false;   // 改成 true 才显示入口
+```
+
+**为什么关掉**：注册 Azure 应用需要一个 Entra 目录，个人微软账号目前无法创建
+（微软已弃用「在目录外创建应用」）。
+
+要用的话，需要先拿到 `client_id`：
 
 1. 在 [Azure Portal](https://portal.azure.com) 注册应用
 2. 受支持的账户类型选「任何组织目录中的账户和个人 Microsoft 账户」
 3. 「身份验证」→ 允许公共客户端流 → 是
-4. 把「应用程序(客户端) ID」填进启动器的账号面板
-
-个人微软账号现在无法直接注册 Azure 应用（需要 Entra 目录 / 订阅），
-所以这一步默认留空。
+4. 复制「应用程序(客户端) ID」，填进 `%APPDATA%\mc-launcher\config.json` 的
+   `microsoftClientId`，或把 `MS_LOGIN_ENABLED` 改成 `true` 后在界面里填
 
 ## 已知问题
 
